@@ -2,6 +2,8 @@ package controllers
 
 import (
 	"github.com/revel/revel"
+	"os"
+	"mime/multipart"
 )
 
 type Multiple struct {
@@ -30,9 +32,20 @@ func (c *Multiple) HandleUpload() revel.Result {
 	// Prepare result.
 	filesInfo := make([]FileInfo, len(files))
 	for i, _ := range files {
+		aFile := c.Params.Files["file[]"][i]
+		a, err := writeFile(aFile)
+		if (err != nil) {
+			filesInfo[i] = FileInfo{
+				ContentType: aFile.Header.Get("Content-Type"),
+				Filename:    err.Error(),
+				Size:        len(files[i]),
+			}
+			continue;
+		}
+
 		filesInfo[i] = FileInfo{
-			ContentType: c.Params.Files["file[]"][i].Header.Get("Content-Type"),
-			Filename:    c.Params.Files["file[]"][i].Filename,
+			ContentType: aFile.Header.Get("Content-Type"),
+			Filename:    a,
 			Size:        len(files[i]),
 		}
 	}
@@ -42,6 +55,36 @@ func (c *Multiple) HandleUpload() revel.Result {
 		"Files":  filesInfo,
 		"Status": "Successfully uploaded",
 	})
+}
+
+func writeFile(file *multipart.FileHeader) (string, error) {
+
+	sourceFile, err := file.Open()
+	targetFile, err := os.Create("/tmp/abc/" + file.Filename)
+	if (err != nil) {
+		return "", err
+	}
+
+	defer targetFile.Close()
+	// TODO: For full file load, use file.Size as buffer size
+	buffer := make([]byte, 4096)
+	for {
+		bytesRead, err := sourceFile.Read(buffer)
+
+		if err != nil {
+			if err.Error() == "EOF" {
+				break
+			}
+
+			return "", err
+		}
+
+		targetFile.Write(buffer[0:bytesRead])
+	}
+
+	targetFile.Sync()
+
+	return targetFile.Name(), nil;
 }
 
 type FileInfo struct {
