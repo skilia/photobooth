@@ -4,6 +4,12 @@ import (
 	"github.com/revel/revel"
 	"os"
 	"mime/multipart"
+	"image"
+	"image/jpeg"
+	"image/png"
+	"image/gif"
+	"errors"
+	"github.com/nfnt/resize"
 )
 
 type Multiple struct {
@@ -19,7 +25,7 @@ func (c *Multiple) HandleUpload() revel.Result {
 	c.Params.Bind(&files, "file")
 
 	// Make sure at least 2 but no more than 3 files are submitted.
-	c.Validation.MinSize(files, 2).Message("You cannot submit less than 2 files")
+	//c.Validation.MinSize(files, 2).Message("You cannot submit less than 2 files")
 	//c.Validation.MaxSize(files, 3).Message("You cannot submit more than 3 files")
 
 	// Handle errors.
@@ -33,19 +39,20 @@ func (c *Multiple) HandleUpload() revel.Result {
 	filesInfo := make([]FileInfo, len(files))
 	for i, _ := range files {
 		aFile := c.Params.Files["file[]"][i]
-		a, err := writeFile(aFile)
+		newFilePath, err := trans(aFile)
 		if (err != nil) {
 			filesInfo[i] = FileInfo{
 				ContentType: aFile.Header.Get("Content-Type"),
 				Filename:    err.Error(),
 				Size:        len(files[i]),
 			}
-			continue;
+
+			continue
 		}
 
 		filesInfo[i] = FileInfo{
 			ContentType: aFile.Header.Get("Content-Type"),
-			Filename:    a,
+			Filename:    newFilePath,
 			Size:        len(files[i]),
 		}
 	}
@@ -55,6 +62,47 @@ func (c *Multiple) HandleUpload() revel.Result {
 		"Files":  filesInfo,
 		"Status": "Successfully uploaded",
 	})
+}
+
+func fileToImage(file *multipart.FileHeader) (image.Image, error) {
+	f, err := file.Open()
+	if err != nil {
+		return nil, err
+	}
+
+	mimeType := file.Header.Get("Content-Type")
+
+	var sentImage image.Image
+
+	switch mimeType {
+	case "image/jpeg":
+		sentImage, err = jpeg.Decode(f)
+	case "image/png":
+		sentImage, err = png.Decode(f)
+	case "image/gif":
+		sentImage, err = gif.Decode(f)
+	default:
+		return nil, errors.New("Unsupported MIME Type: '" + mimeType + "'")
+	}
+
+	return sentImage, err
+}
+
+func trans(file *multipart.FileHeader) (string, error) {
+	imageFile, err := fileToImage(file)
+	if err != nil {
+		return "", err
+	}
+
+	imageFile = resize.Thumbnail(500, 500, imageFile, resize.Lanczos3)
+
+	filename := "/tmp/abc/" + file.Filename + ".jpg"
+	out, err := os.Create(filename)
+	if err != nil {
+		return "", err
+	}
+	return filename, jpeg.Encode(out, imageFile, nil)
+
 }
 
 func writeFile(file *multipart.FileHeader) (string, error) {
