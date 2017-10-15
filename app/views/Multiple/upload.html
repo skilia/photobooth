@@ -1,0 +1,19 @@
+{{set . "title" "Upload Multiple Files"}}
+{{template "header.html" .}}
+
+<div class="container">
+    <div class="row">
+        <div class="span6">
+            <form method="post" action="{{url "Multiple.HandleUpload"}}" enctype="multipart/form-data">
+            <p>
+                <label for="files"><strong>Files:</strong></label>
+                <input type="file" name="file[]" multiple="multiple" id="files" accept="image/*" />
+            </p>
+            <hr>
+            <input type="submit" value="Upload" class="btn btn-large btn-success">
+            </form>
+        </div>
+    </div>
+</div>
+
+{{template "footer.html" .}}
