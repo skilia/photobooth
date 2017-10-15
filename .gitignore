@@ -15,3 +15,6 @@
 
 # JetBrains project folder
 .idea/
+
+app/tmp/
+app/routes/
