@@ -1,44 +1,76 @@
-package controllers
+package printer
 
 import (
+	"container/list"
 	"github.com/revel/revel"
-	"github.com/muka/go-bluetooth/bluez/profile/obex"
 	"github.com/muka/go-bluetooth/api"
-	"errors"
+	"github.com/muka/go-bluetooth/bluez/profile/obex"
 	"time"
+	"errors"
 )
+
+func init() {
+	go printer()
+}
 
 var (
-	temp       = 1
-	obexClient = obex.NewObexClient1()
+	images     = make(chan string)
+	obexClient *obex.ObexClient1
+	targetDevice = "98:4E:97:00:3F:3C"
+
 )
 
-type Printer struct {
-	*revel.Controller
+func AddImage(path string) {
+	revel.AppLog.Error("Called AddImage")
+	images <- path
 }
 
-type PrintJob struct {
-}
-
-func (c *Printer) Index() revel.Result {
-	revel.AppLog.Error("Hello!", "temp", temp)
-	temp++
-	return c.Render()
-}
-
-func (c *Printer) PrintImage(deviceAddress string) revel.Result {
-	filepath := "/home/mr/Pictures/who-is-awesome.jpg"
+func printer() {
+	transfer := list.New()
 	log := revel.AppLog
-	log.Error("Hello!", "temp", temp)
+	obexClient = obex.NewObexClient1()
 
-	go sendFile(deviceAddress, filepath)
-	//if err != nil {
-	//	return c.RenderError(err)
-	//}
-	return c.Render()
+	log.Error("Printer routine started!")
+
+	for {
+		log.Error("Waiting...")
+
+		select {
+		case image := <-images:
+			log.Error("Received File to send!")
+
+			temp(targetDevice, image)
+			transfer.PushBack(image)
+		}
+	}
 }
 
-func sendFile(targetAddress string, filePath string) error {
+func connectToDevice(targetAddress string) (string, error) {
+	log := revel.AppLog
+	log.Infof("Connect to Device", "Target", targetAddress)
+	sessionArgs := map[string]interface{}{}
+	sessionArgs["Target"] = "opp"
+
+	tries := 1
+	maxRetry := 20
+	var sessionPath string
+	var err error
+	for tries < maxRetry {
+		log.Debug("Create Session...")
+		sessionPath, err = obexClient.CreateSession(targetAddress, sessionArgs)
+		if err == nil {
+			return sessionPath, nil
+		}
+
+		tries++
+		log.Error(err.Error())
+	}
+
+	//log.Fatal("Max tries reached")
+	return "", errors.New("Max tries reached")
+}
+
+func temp(targetAddress string, filePath string) error {
 	log := revel.AppLog
 	log.Info("sendFile", "targetAddress", targetAddress, "filePath", filePath)
 	dev, err := api.GetDeviceByAddress(targetAddress)
@@ -65,32 +97,23 @@ func sendFile(targetAddress string, filePath string) error {
 		log.Debug("already paired")
 	}
 
-	sessionArgs := map[string]interface{}{}
-	sessionArgs["Target"] = "opp"
+	sessionPath, err := connectToDevice(targetAddress)
+	//defer obexClient.RemoveSession(sessionPath)
 
-	tries := 1
-	maxRetry := 20
-	var sessionPath string
-	for tries < maxRetry {
-		log.Debug("Create Session...")
-		sessionPath, err = obexClient.CreateSession(targetAddress, sessionArgs)
-		if err == nil {
-			break
-		}
-
-		tries++
-
-		if err != nil {
-			log.Error(err.Error())
-			obexClient.GetClient().Connect()
-		}
-	}
-	if tries >= maxRetry {
-		//log.Fatal("Max tries reached")
-		return errors.New("Max tries reached")
+	if err != nil {
+		return err
 	}
 
 	log.Debug("Session created: ", "sessionPath", sessionPath)
+
+	printSession(sessionPath)
+	sendFile(sessionPath, filePath)
+
+	return nil
+}
+
+func printSession(sessionPath string) error {
+	log := revel.AppLog
 
 	obexSession := obex.NewObexSession1(sessionPath)
 	sessionProps, err := obexSession.GetProperties()
@@ -106,10 +129,18 @@ func sendFile(targetAddress string, filePath string) error {
 	log.Debug("Root			: ", "Root			", sessionProps.Root)
 
 	log.Debug("Init transmission on ", "sessionPath", sessionPath)
+
+	log.Debug(sessionPath)
+
+	return nil
+}
+
+func sendFile(sessionPath string, filePath string) error {
+	log := revel.AppLog
+
 	obexObjectPush := obex.NewObjectPush1(sessionPath)
 	log.Debug("Send File: ", "filePath", filePath)
 
-	obexObjectPush.SendFile(filePath)
 	transPath, transProps, err := obexObjectPush.SendFile(filePath)
 	if err != nil {
 		log.Error(err.Error())
@@ -139,10 +170,6 @@ func sendFile(targetAddress string, filePath string) error {
 
 		log.Debug("Progress    : ", "Progress", transferedPercent)
 	}
-
-	log.Debug(sessionPath)
-
-	obexClient.RemoveSession(sessionPath)
 
 	return nil
 }

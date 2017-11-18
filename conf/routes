@@ -15,7 +15,5 @@ GET     /favicon.ico                            404
 # Map static resources from the /app/public folder to the /public path
 GET     /public/*filepath                       Static.Serve("public")
 
-GET     /printer/print-image/:deviceAddress     Printer.PrintImage
-
 # Catch all
 *       /:controller/:action                    :controller.:action
