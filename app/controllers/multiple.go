@@ -13,7 +13,7 @@ import (
 )
 
 type Multiple struct {
-	App
+	*revel.Controller
 }
 
 func (c *Multiple) Upload() revel.Result {
