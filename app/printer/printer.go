@@ -1,32 +1,32 @@
 package printer
 
 import (
-	"container/list"
-	"github.com/revel/revel"
+	"errors"
 	"github.com/muka/go-bluetooth/api"
 	"github.com/muka/go-bluetooth/bluez/profile/obex"
+	"github.com/revel/revel"
 	"time"
-	"errors"
 )
 
 func init() {
-	go printer()
+	go recoverer(5, 1, printer)
 }
 
 var (
-	images     = make(chan string)
+	images     = make(chan string, 10)
 	obexClient *obex.ObexClient1
-	targetDevice = "98:4E:97:00:3F:3C"
-
+	//targetDevice = "98:4E:97:00:3F:3C"
+	targetDevice = "94:65:2D:7F:C1:A4"
 )
 
 func AddImage(path string) {
-	revel.AppLog.Error("Called AddImage")
+	revel.AppLog.Error("Called AddImage", "path", path)
 	images <- path
+	revel.AppLog.Error("Left AddImage", "path", path)
 }
 
 func printer() {
-	transfer := list.New()
+	//transfer := list.New()
 	log := revel.AppLog
 	obexClient = obex.NewObexClient1()
 
@@ -34,14 +34,7 @@ func printer() {
 
 	for {
 		log.Error("Waiting...")
-
-		select {
-		case image := <-images:
-			log.Error("Received File to send!")
-
-			temp(targetDevice, image)
-			transfer.PushBack(image)
-		}
+		temp(targetDevice)
 	}
 }
 
@@ -56,7 +49,7 @@ func connectToDevice(targetAddress string) (string, error) {
 	var sessionPath string
 	var err error
 	for tries < maxRetry {
-		log.Debug("Create Session...")
+		log.Debug("Create Session...", "targetAddress", targetAddress)
 		sessionPath, err = obexClient.CreateSession(targetAddress, sessionArgs)
 		if err == nil {
 			return sessionPath, nil
@@ -70,9 +63,9 @@ func connectToDevice(targetAddress string) (string, error) {
 	return "", errors.New("Max tries reached")
 }
 
-func temp(targetAddress string, filePath string) error {
+func temp(targetAddress string) error {
 	log := revel.AppLog
-	log.Info("sendFile", "targetAddress", targetAddress, "filePath", filePath)
+	log.Info("sendFile", "targetAddress", targetAddress)
 	dev, err := api.GetDeviceByAddress(targetAddress)
 	if err != nil {
 		panic(err)
@@ -97,19 +90,28 @@ func temp(targetAddress string, filePath string) error {
 		log.Debug("already paired")
 	}
 
-	sessionPath, err := connectToDevice(targetAddress)
-	//defer obexClient.RemoveSession(sessionPath)
+	sessionPath := ""
+	for {
+		select {
+		case filePath := <-images:
+			if sessionPath == "" {
+				sessionPath, err = connectToDevice(targetAddress)
+			}
+			//defer obexClient.RemoveSession(sessionPath)
 
-	if err != nil {
-		return err
+			if err != nil {
+				return err
+			}
+
+			log.Debug("Session created: ", "sessionPath", sessionPath)
+			printSession(sessionPath)
+
+			log.Error("Received File to send!")
+			sendFile(sessionPath, filePath)
+			//default:
+			//	return nil
+		}
 	}
-
-	log.Debug("Session created: ", "sessionPath", sessionPath)
-
-	printSession(sessionPath)
-	sendFile(sessionPath, filePath)
-
-	return nil
 }
 
 func printSession(sessionPath string) error {
@@ -159,7 +161,7 @@ func sendFile(sessionPath string, filePath string) error {
 
 	for transProps.Transferred < transProps.Size {
 		time.Sleep(1 * time.Second)
-
+		log.Debug("Read Transfer", "transPath", transPath)
 		obexTransfer := obex.NewObexTransfer1(transPath)
 		transProps, err = obexTransfer.GetProperties()
 		if err != nil {
@@ -172,4 +174,21 @@ func sendFile(sessionPath string, filePath string) error {
 	}
 
 	return nil
+}
+
+func recoverer(maxPanics, id int, f func()) {
+	log := revel.AppLog
+
+	defer func() {
+		if err := recover(); err != nil {
+			log.Error("HERE", "id", id)
+			log.Error("err", "err", err)
+			if maxPanics == 0 {
+				panic("TOO MANY PANICS")
+			} else {
+				go recoverer(maxPanics-1, id, f)
+			}
+		}
+	}()
+	f()
 }
