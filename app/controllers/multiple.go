@@ -10,10 +10,11 @@ import (
 	"image/gif"
 	"errors"
 	"github.com/nfnt/resize"
+	"github.com/skilia/photobooth/app/printer"
 )
 
 type Multiple struct {
-	App
+	*revel.Controller
 }
 
 func (c *Multiple) Upload() revel.Result {
@@ -29,11 +30,11 @@ func (c *Multiple) HandleUpload() revel.Result {
 	//c.Validation.MaxSize(files, 3).Message("You cannot submit more than 3 files")
 
 	// Handle errors.
-	if c.Validation.HasErrors() {
-		c.Validation.Keep()
-		c.FlashParams()
-		return c.Redirect((*Multiple).Upload)
-	}
+	//if c.Validation.HasErrors() {
+	//	c.Validation.Keep()
+	//	c.FlashParams()
+	//	return c.Redirect((*Multiple).Upload)
+	//}
 
 	// Prepare result.
 	filesInfo := make([]FileInfo, len(files))
@@ -49,6 +50,8 @@ func (c *Multiple) HandleUpload() revel.Result {
 
 			continue
 		}
+
+		printer.AddImage(newFilePath)
 
 		filesInfo[i] = FileInfo{
 			ContentType: aFile.Header.Get("Content-Type"),
@@ -72,20 +75,20 @@ func fileToImage(file *multipart.FileHeader) (image.Image, error) {
 
 	mimeType := file.Header.Get("Content-Type")
 
-	var sentImage image.Image
+	var decodedImage image.Image
 
 	switch mimeType {
 	case "image/jpeg":
-		sentImage, err = jpeg.Decode(f)
+		decodedImage, err = jpeg.Decode(f)
 	case "image/png":
-		sentImage, err = png.Decode(f)
+		decodedImage, err = png.Decode(f)
 	case "image/gif":
-		sentImage, err = gif.Decode(f)
+		decodedImage, err = gif.Decode(f)
 	default:
 		return nil, errors.New("Unsupported MIME Type: '" + mimeType + "'")
 	}
 
-	return sentImage, err
+	return decodedImage, err
 }
 
 func trans(file *multipart.FileHeader) (string, error) {
@@ -94,7 +97,7 @@ func trans(file *multipart.FileHeader) (string, error) {
 		return "", err
 	}
 
-	imageFile = resize.Thumbnail(500, 500, imageFile, resize.Lanczos3)
+	imageFile = resize.Thumbnail(1500, 1500, imageFile, resize.Lanczos3)
 
 	filename := "/tmp/abc/" + file.Filename + ".jpg"
 	out, err := os.Create(filename)
@@ -143,3 +146,4 @@ type FileInfo struct {
 	Size        int
 	Status      string `json:",omitempty"`
 }
+
