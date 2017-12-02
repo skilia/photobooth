@@ -4,6 +4,10 @@
 *.so
 *.dylib
 
+# Packages for programs
+*.tar.gz
+*.tar
+
 # Test binary, build with `go test -c`
 *.test
 

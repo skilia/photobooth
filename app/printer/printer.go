@@ -15,8 +15,8 @@ func init() {
 var (
 	images     = make(chan string, 10)
 	obexClient *obex.ObexClient1
-	//targetDevice = "98:4E:97:00:3F:3C"
-	targetDevice = "94:65:2D:7F:C1:A4"
+	targetDevice = "98:4E:97:00:3F:3C"
+	//targetDevice = "94:65:2D:7F:C1:A4"
 )
 
 func AddImage(path string) {

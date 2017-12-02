@@ -97,7 +97,7 @@ func trans(file *multipart.FileHeader) (string, error) {
 		return "", err
 	}
 
-	imageFile = resize.Thumbnail(500, 500, imageFile, resize.Lanczos3)
+	imageFile = resize.Thumbnail(1500, 1500, imageFile, resize.Lanczos3)
 
 	filename := "/tmp/abc/" + file.Filename + ".jpg"
 	out, err := os.Create(filename)
