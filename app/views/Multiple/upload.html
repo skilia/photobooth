@@ -1,19 +1,47 @@
 {{set . "title" "Upload Multiple Files"}}
+{{append . "moreScripts" "js/dropzone/dropzone.js"}}
+{{append . "moreStyles" "css/dropzone/basic.css"}}
+{{append . "moreStyles" "css/dropzone/dropzone.css"}}
+
 {{template "header.html" .}}
 
 <div class="container">
     <div class="row">
         <div class="span6">
             <form method="post" action="{{url "Multiple.HandleUpload"}}" enctype="multipart/form-data">
-            <p>
-                <label for="files"><strong>Files:</strong></label>
-                <input type="file" name="file[]" multiple="multiple" id="files" accept="image/*" />
-            </p>
+                <p>
+                    <label for="files"><strong>Files:</strong></label>
+                    <input type="file" name="file[]" multiple="multiple" id="files" accept="image/*"/>
+                </p>
+                <input type="submit" value="Upload" class="btn btn-large btn-success">
+            </form>
             <hr>
-            <input type="submit" value="Upload" class="btn btn-large btn-success">
+
+            <form method="post" action="{{url "Multiple.HandleUpload"}}" enctype="multipart/form-data">
+                <p>
+                    <label for="files"><strong>Files:</strong></label>
+                    <input type="file" name="file" id="files" accept="image/*"/>
+                </p>
+                <hr>
+                <input type="submit" value="Upload" class="btn btn-large btn-success">
+            </form>
+            <hr>
+
+            <form action="{{url "Multiple.HandleUpload"}}" class="dropzone" id="dropzoneForm">
+                <div class="fallback">
+                    <input name="file" type="file" multiple/>
+                </div>
             </form>
         </div>
     </div>
 </div>
+<script>
+    Dropzone.options.dropzoneForm = {
+        paramName: "file",
+        uploadMultiple: true,
+        acceptedFiles: "image/*",
+        addRemoveLinks: true
+    }
+</script>
 
 {{template "footer.html" .}}

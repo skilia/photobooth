@@ -2,20 +2,21 @@
 {{template "header.html" .}}
 
 <header class="jumbotron" style="background-color:#A9F16C">
-  <div class="container">
-    <div class="row">
-      <h1>It works!</h1>
-      <p></p>
+    <div class="container">
+        <div class="row">
+            <h1>It works!</h1>
+            <p></p>
+        </div>
     </div>
-  </div>
 </header>
 
 <div class="container">
-  <div class="row">
-    <div class="span6">
-      {{template "flash.html" .}}
+    <div class="row">
+        <div class="span6">
+            <a href="{{url "Multiple.Upload"}}">Upload multiple File the HTML5 Way</a>
+        {{template "flash.html" .}}
+        </div>
     </div>
-  </div>
 </div>
 
 {{template "footer.html" .}}

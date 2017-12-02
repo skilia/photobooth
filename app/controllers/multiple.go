@@ -2,140 +2,15 @@ package controllers
 
 import (
 	"github.com/revel/revel"
-	"os"
+	//	"github.com/skilia/photobooth/app/printer"
+	"github.com/skilia/photobooth/app/imageManipulation"
 	"mime/multipart"
-	"image"
-	"image/jpeg"
-	"image/png"
-	"image/gif"
-	"errors"
-	"github.com/nfnt/resize"
-	"github.com/skilia/photobooth/app/printer"
+	"os"
+	"fmt"
 )
 
 type Multiple struct {
 	*revel.Controller
-}
-
-func (c *Multiple) Upload() revel.Result {
-	return c.Render()
-}
-
-func (c *Multiple) HandleUpload() revel.Result {
-	var files [][]byte
-	c.Params.Bind(&files, "file")
-
-	// Make sure at least 2 but no more than 3 files are submitted.
-	//c.Validation.MinSize(files, 2).Message("You cannot submit less than 2 files")
-	//c.Validation.MaxSize(files, 3).Message("You cannot submit more than 3 files")
-
-	// Handle errors.
-	//if c.Validation.HasErrors() {
-	//	c.Validation.Keep()
-	//	c.FlashParams()
-	//	return c.Redirect((*Multiple).Upload)
-	//}
-
-	// Prepare result.
-	filesInfo := make([]FileInfo, len(files))
-	for i, _ := range files {
-		aFile := c.Params.Files["file[]"][i]
-		newFilePath, err := trans(aFile)
-		if (err != nil) {
-			filesInfo[i] = FileInfo{
-				ContentType: aFile.Header.Get("Content-Type"),
-				Filename:    err.Error(),
-				Size:        len(files[i]),
-			}
-
-			continue
-		}
-
-		printer.AddImage(newFilePath)
-
-		filesInfo[i] = FileInfo{
-			ContentType: aFile.Header.Get("Content-Type"),
-			Filename:    newFilePath,
-			Size:        len(files[i]),
-		}
-	}
-
-	return c.RenderJSON(map[string]interface{}{
-		"Count":  len(files),
-		"Files":  filesInfo,
-		"Status": "Successfully uploaded",
-	})
-}
-
-func fileToImage(file *multipart.FileHeader) (image.Image, error) {
-	f, err := file.Open()
-	if err != nil {
-		return nil, err
-	}
-
-	mimeType := file.Header.Get("Content-Type")
-
-	var decodedImage image.Image
-
-	switch mimeType {
-	case "image/jpeg":
-		decodedImage, err = jpeg.Decode(f)
-	case "image/png":
-		decodedImage, err = png.Decode(f)
-	case "image/gif":
-		decodedImage, err = gif.Decode(f)
-	default:
-		return nil, errors.New("Unsupported MIME Type: '" + mimeType + "'")
-	}
-
-	return decodedImage, err
-}
-
-func trans(file *multipart.FileHeader) (string, error) {
-	imageFile, err := fileToImage(file)
-	if err != nil {
-		return "", err
-	}
-
-	imageFile = resize.Thumbnail(1500, 1500, imageFile, resize.Lanczos3)
-
-	filename := "/tmp/abc/" + file.Filename + ".jpg"
-	out, err := os.Create(filename)
-	if err != nil {
-		return "", err
-	}
-	return filename, jpeg.Encode(out, imageFile, nil)
-
-}
-
-func writeFile(file *multipart.FileHeader) (string, error) {
-
-	sourceFile, err := file.Open()
-	targetFile, err := os.Create("/tmp/abc/" + file.Filename)
-	if (err != nil) {
-		return "", err
-	}
-
-	defer targetFile.Close()
-	// TODO: For full file load, use file.Size as buffer size
-	buffer := make([]byte, 4096)
-	for {
-		bytesRead, err := sourceFile.Read(buffer)
-
-		if err != nil {
-			if err.Error() == "EOF" {
-				break
-			}
-
-			return "", err
-		}
-
-		targetFile.Write(buffer[0:bytesRead])
-	}
-
-	targetFile.Sync()
-
-	return targetFile.Name(), nil;
 }
 
 type FileInfo struct {
@@ -143,7 +18,74 @@ type FileInfo struct {
 	Filename    string
 	RealFormat  string `json:",omitempty"`
 	Resolution  string `json:",omitempty"`
-	Size        int
+	Size        int64
 	Status      string `json:",omitempty"`
 }
 
+type Response struct {
+	Files  []FileInfo `json:",omitempty"`
+	Errors []string   `json:",omitempty"`
+	Count  int
+	Status string
+}
+
+func (c *Multiple) Upload() revel.Result {
+	return c.Render()
+}
+
+func (c *Multiple) HandleUpload() revel.Result {
+	response := Response{}
+	// Prepare result.
+	for _, fileHeaders := range c.Params.Files {
+		for _, aFile := range fileHeaders {
+			response.Count++
+
+			aFileInfo, err := handleSingleFile(aFile)
+			if err != nil {
+				response.Errors = append(response.Errors, err.Error())
+				continue
+			}
+
+			response.Files = append(response.Files, aFileInfo)
+		}
+	}
+
+	if len(response.Errors) < 1 {
+		response.Status = "Successfully uploaded"
+	} else {
+		response.Status = "Errors occurred"
+	}
+
+	return c.RenderJSON(response)
+}
+
+func handleSingleFile(aFile *multipart.FileHeader) (FileInfo, error) {
+	// Convert image and save to disk
+	newFilePath, err := imageManipulation.SaveToDisk(aFile)
+	if err != nil {
+		return FileInfo{}, err
+	}
+
+	//printer.AddImage(newFilePath)
+
+	fileStruct := FileInfo{
+		ContentType: aFile.Header.Get("Content-Type"),
+		Filename:    newFilePath,
+		Size: getFileSize(aFile),
+	}
+
+	return fileStruct, nil
+}
+func getFileSize(fileHeader *multipart.FileHeader) int64 {
+	mfile, _ := fileHeader.Open() //fh *multipart.FileHeader
+	switch t := mfile.(type) {
+	case *os.File:
+		fi, _ := t.Stat()
+		return fi.Size()
+	default:
+		sr, _ := mfile.Seek(0,0)
+		fmt.Println(sr)
+		revel.AppLog.Error("Unable to get file size", "t", t, "sr", sr)
+		return 0
+	}
+}
